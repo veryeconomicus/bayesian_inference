@@ -7,4 +7,4 @@ The education has long been commanded as a premier investment on human capitals,
 
 ## Material
 Please refer to [bayesian_inference.pdf](./bayesian_inference.pdf) file for full text
-### Please refer to bayesian_inference.rdm and usa_00001.csv for replication file
+Please refer to [bayesian_inference.Rdm](./bayesian_inference.Rdm) for replication file
