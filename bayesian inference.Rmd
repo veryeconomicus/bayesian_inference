@@ -1,0 +1,458 @@
+---
+title: "ST308 Coursework"
+author: "Juhyeon Eom"
+---
+
+# Data
+
+We use a individual-level survey microdata in Year 2021 & 2022
+```{r}
+install.packages("readr")
+library(readr)
+
+# Load data and select needed variables
+raw_data <- read_csv("usa_00001.csv")
+```
+
+### Data cleaning
+```{r}
+# EDUC == 0: N/A or missing, EDUC == 1: GRADE 4 or Less, EDUC == 2: GRADE 5-8
+hist(raw_data$AGE[raw_data$EDUC <= 2], breaks = 50, col = "blue")
+
+# This shows that we can safely exclude EDUC == 0, 1, 2 -> mostly at age not eligible for working
+```
+
+```{r}
+library(dplyr)
+
+data <- raw_data %>%
+  dplyr::select(SERIAL, STATEICP, SEX, AGE, MARST, RACE, EDUC, EDUCD, CLASSWKR, UHRSWORK, INCWAGE) %>%
+  # INCWAGE: 999999 = N/A 999998 = Missing & Do not consider Salary-based income == 0
+  filter(INCWAGE != 999999 & INCWAGE != 999998 & INCWAGE != 0) %>%
+  # Exclude the case where INCWAGE is less than minimum wage based calculation
+  filter(INCWAGE > 7.25 * UHRSWORK * 52) %>%
+  filter(EDUC > 2) %>%
+  filter(CLASSWKR != 0) %>%
+  # Make a continuous variable Years of Education (YEDUC) using categorical classification (EDUC)
+  mutate(YEDUC = case_when(
+    EDUC == 3 ~ 9,
+    EDUC == 4 ~ 10,
+    EDUC == 5 ~ 11,
+    EDUC == 6 ~ 12,
+    EDUC == 7 ~ 13,
+    EDUC == 8 ~ 14,
+    EDUC == 9 ~ 15,
+    EDUC == 10 ~ 16,
+    # EDUCD == 114, 115 "Master's Degree" and "Professional Degree beyond Bachelor" (e.g. MBA), equivalent to two years of additional education
+    EDUC == 11 & (EDUCD == 114 |EDUCD == 115) ~ 18,
+    # EDUCD == 116 "Doctoral Degree", equivalent to four years of additional education
+    EDUC == 11 & EDUCD == 116 ~ 22
+  )) %>%
+  mutate(cSEX = case_when(
+    SEX == 1 ~ "Male",
+    SEX == 2 ~ "Female"
+  )) %>%
+  mutate(cRACE = case_when(
+    RACE == 1 ~ "White",
+    RACE == 2 ~ "Black/African American",
+    RACE == 3 ~ "American Indian or Alaska Native",
+    RACE == 4 ~ "Chinese",
+    RACE == 5 ~ "Japanese",
+    RACE == 6 ~ "Other Asian or Pacific Islander",
+    RACE == 7 ~ "Other race",
+    RACE == 8 ~ "Two major races",
+    RACE == 9 ~ "Three or more major races",
+  )) %>%
+  mutate(cMARST = case_when(
+    MARST == 1 ~ "Married, spouse present",
+    MARST == 2 ~ "Married, spouse absent",
+    MARST == 3 ~ "Separated",
+    MARST == 4 ~ "Divorced",
+    MARST == 5 ~ "Widowed",
+    MARST == 6 ~ "Never married/single",
+    MARST == 9 ~ "Blank, missing",
+  )) %>%
+  mutate(STATE = case_when(
+    STATEICP == 01 ~ "Connecticut",
+    STATEICP == 02 ~ "Maine",
+    STATEICP == 03 ~ "Massachusetts",
+    STATEICP == 04 ~ "New Hampshire",
+    STATEICP == 05 ~ "Rhode Island",
+    STATEICP == 06 ~ "Vermont",
+    STATEICP == 11 ~ "Delaware",
+    STATEICP == 12 ~ "New Jersey",
+    STATEICP == 13 ~ "New York",
+    STATEICP == 14 ~ "Pennsylvania",
+    STATEICP == 21 ~ "Illinois",
+    STATEICP == 22 ~ "Indiana",
+    STATEICP == 23 ~ "Michigan",
+    STATEICP == 24 ~ "Ohio",
+    STATEICP == 25 ~ "Wisconsin",
+    STATEICP == 31 ~ "Iowa",
+    STATEICP == 32 ~ "Kansas",
+    STATEICP == 33 ~ "Minnesota",
+    STATEICP == 34 ~ "Missouri",
+    STATEICP == 35 ~ "Nebraska",
+    STATEICP == 36 ~ "North Dakota",
+    STATEICP == 37 ~ "South Dakota",
+    STATEICP == 40 ~ "Virginia",
+    STATEICP == 41 ~ "Alabama",
+    STATEICP == 42 ~ "Arkansas",
+    STATEICP == 43 ~ "Florida",
+    STATEICP == 44 ~ "Georgia",
+    STATEICP == 45 ~ "Louisiana",
+    STATEICP == 46 ~ "Mississippi",
+    STATEICP == 47 ~ "North Carolina",
+    STATEICP == 48 ~ "South Carolina",
+    STATEICP == 49 ~ "Texas",
+    STATEICP == 51 ~ "Kentucky",
+    STATEICP == 52 ~ "Maryland",
+    STATEICP == 53 ~ "Oklahoma",
+    STATEICP == 54 ~ "Tennessee",
+    STATEICP == 56 ~ "West Virginia",
+    STATEICP == 61 ~ "Arizona",
+    STATEICP == 62 ~ "Colorado",
+    STATEICP == 63 ~ "Idaho",
+    STATEICP == 64 ~ "Montana",
+    STATEICP == 65 ~ "Nevada",
+    STATEICP == 66 ~ "New Mexico",
+    STATEICP == 67 ~ "Utah",
+    STATEICP == 68 ~ "Wyoming",
+    STATEICP == 71 ~ "California",
+    STATEICP == 72 ~ "Oregon",
+    STATEICP == 73 ~ "Washington",
+    STATEICP == 81 ~ "Alaska",
+    STATEICP == 82 ~ "Hawaii",
+    STATEICP == 83 ~ "Puerto Rico",
+    TRUE ~ NA_character_
+  ))
+
+data <- na.omit(data)
+summary(data)
+```
+
+Descriptive statistics (Overall)
+```{r}
+summary(data$INCWAGE)
+summary(data$AGE)
+summary(data$UHRSWORK)
+summary(data$YEDUC)
+
+sd(data$INCWAGE)
+sd(data$AGE)
+sd(data$UHRSWORK)
+sd(data$YEDUC)
+```
+
+Descriptive statistics (Male)
+```{r}
+n <- data[data$cSEX == "Male",]
+summary(data[data$cSEX == "Male",]$INCWAGE)
+summary(data[data$cSEX == "Male",]$AGE)
+summary(data[data$cSEX == "Male",]$UHRSWORK)
+summary(data[data$cSEX == "Male",]$YEDUC)
+
+sd(data[data$cSEX == "Male",]$INCWAGE)
+sd(data[data$cSEX == "Male",]$AGE)
+sd(data[data$cSEX == "Male",]$UHRSWORK)
+sd(data[data$cSEX == "Male",]$YEDUC)
+```
+
+Descriptive statistics (Female)
+```{r}
+m <- data[data$cSEX == "Female",]
+summary(data[data$cSEX == "Female",]$INCWAGE)
+summary(data[data$cSEX == "Female",]$AGE)
+summary(data[data$cSEX == "Female",]$UHRSWORK)
+summary(data[data$cSEX == "Female",]$YEDUC)
+
+sd(data[data$cSEX == "Female",]$INCWAGE)
+sd(data[data$cSEX == "Female",]$AGE)
+sd(data[data$cSEX == "Female",]$UHRSWORK)
+sd(data[data$cSEX == "Female",]$YEDUC)
+```
+
+### Perform Exploratory Data Analysis
+
+General Case: The effect of years of education on salary-based income (labour income)
+```{r}
+library(ggplot2)
+
+colours <- c("red", "blue", "green", "yellow", "purple", "orange", "brown", "pink", "grey")
+
+ggplot(data, aes(x=YEDUC, y=INCWAGE, fill=factor(YEDUC))) + 
+  theme(
+    axis.line = element_line(),
+    panel.background = element_rect(fill = "white"),
+  ) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_fill_manual(values=colours) + 
+  scale_y_continuous(limits = c(0, 400000),
+                     expand = c(0, 0),
+                     breaks = seq(0, 400000, by = 50000))
+```
+
+
+Income level dependent to SEX
+```{r}
+ggplot(data, aes(x=SEX, y=INCWAGE, fill=factor(SEX))) +
+  geom_boxplot(outlier.shape = NA) +
+  scale_y_continuous(
+    limits = c(0, 200000),
+    expand = c(0, 0),
+    breaks = seq(0, 200000, by = 25000)
+  ) +
+  theme_classic() + 
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "white"),
+    axis.title.x = element_blank(),  
+    axis.title.y = element_text(size = 12, angle = 90), 
+    axis.text.x = element_text(size = 10),  
+    axis.text.y = element_text(size = 10) 
+  )
+
+# 1: Male / 2: Female
+```
+
+How does the effect of education on income varies by sex
+```{r}
+data$SEX <- factor(data$SEX, labels = c('MALE', 'FEMALE'))
+
+# Create the grouped box plot
+ggplot(data, aes(x = factor(YEDUC), y = INCWAGE, fill = SEX)) +
+  geom_boxplot(outlier.shape = NA, position=position_dodge(width=0.5), width=0.35) +
+  xlab("Years of Education") +
+  ylab("Salary-based Income (US$)") +
+  scale_fill_manual(values = c("red", "blue")) +
+  scale_y_continuous(
+    limits = c(0, 200000),
+    expand = c(0, 0),
+    breaks = seq(0, 200000, by = 25000)
+  ) +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "white"),
+    legend.position = "right", 
+    axis.title.x = element_text(size = 12), 
+    axis.title.y = element_text(size = 12, angle = 90),  
+    axis.text.x = element_text(size = 10), 
+    axis.text.y = element_text(size = 10)  
+  )
+
+```
+
+STATE-varient effect of education on income
+```{r}
+library(scales)
+ggplot(data=data, aes(x=YEDUC,y=INCWAGE)) +
+  stat_smooth(method="lm", formula = y ~ poly(x, 5), fullrange=TRUE, linewidth = 0.5) +
+  xlab("Years of Education") + ylab("Income") + 
+  scale_y_continuous(
+    breaks = c(0, 50000, 100000, 150000), 
+    expand = c(0, 0),
+    labels = label_number(big.mark = ",")) +
+  theme_minimal() + 
+  facet_wrap( ~ STATE) +
+  theme(axis.title=element_text(size=8),
+        axis.text=element_text(size=5),
+        strip.text=element_text(size=5))
+
+```
+
+STATE-varient income distribution
+```{r}
+ggplot(data, aes(x = INCWAGE, color = STATE)) + 
+  geom_density() +  
+  labs(title = "Probability Density of State-Varient Salary Income",
+       x = "Annual Income (US$)") +
+  scale_y_continuous(
+    breaks = c(0, 0.000005, 0.00001, 0.000015, 0.00002), 
+    expand = c(0, 0),
+    labels = label_number(big.mark = ",")) +
+  scale_x_continuous(
+    breaks = c(0, 200000, 400000, 600000, 800000), 
+    expand = c(0, 0),
+    labels = label_number(big.mark = ",")) +
+  theme_minimal() + 
+  theme(panel.background = element_rect(fill = "white"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(colour = "black"),
+        plot.title = element_text(hjust = -0.05, size = 12),
+        axis.title.y = element_blank(), 
+        legend.position = "none")
+```
+
+# Frequentist Linear Regression Model (OLS/Ridge/Lasso)
+
+a) OLS
+
+```{r}
+# A pooled OLS regression of income on educational attainment 
+OLS1 <- lm(INCWAGE ~ YEDUC, data)
+summary(OLS1)
+```
+
+```{r}
+# A pooled OLS regression of income on educational attainment with controls (race, maritial status, hours of works per week, and sex)
+OLS2 <- lm(INCWAGE ~ YEDUC + AGE + UHRSWORK + cRACE + cMARST + STATE, data)
+summary(OLS2)
+```
+
+```{r}
+# A Separate simple OLS regression of income on educational attainment with controls by SEX
+OLS_male_s <- lm(INCWAGE ~ YEDUC, data[data$cSEX == "Male",])
+OLS_female_s <- lm(INCWAGE ~ YEDUC, data[data$cSEX == "Female",])
+
+summary(OLS_male_s)
+summary(OLS_female_s)
+```
+
+```{r}
+# A Separate OLS regression of income on educational attainment with controls by SEX, with added controls and fixed effects
+OLS_male <- lm(INCWAGE ~ YEDUC + AGE + UHRSWORK + cRACE + cMARST + STATE, data[data$cSEX == "Male",])
+OLS_female <- lm(INCWAGE ~ YEDUC + AGE + UHRSWORK + cRACE + cMARST + STATE, data[data$cSEX == "Female",])
+
+summary(OLS_male)
+summary(OLS_female)
+```
+
+
+b) Ridge & Lasso
+```{r}
+library(ISLR)
+library(MASS)
+library(glmnet)
+```
+
+Optimise tuning parameter 'lambda' using train data (cross-validation), and estimate the parameters of interest using test data
+
+The serial number given for individual is randomly assigned - hence a sampling by a unique serial number will give randomized train and test samples for optimising lambda using cross-validation
+```{r}
+# Setup
+data.train <- data[data$SERIAL %% 2 == 1, ]
+data.test <- data[data$SERIAL %% 2 == 0, ]
+
+train.mat <- model.matrix(INCWAGE ~ YEDUC + AGE + UHRSWORK + cRACE + cMARST + STATE, data = data.train)
+test.mat <- model.matrix(INCWAGE ~ YEDUC + AGE + UHRSWORK + cRACE + cMARST + STATE, data = data.test)
+
+grid <-  10 ^ seq(4, -2, length = 100)
+```
+
+Ridge (Frequentist)
+```{r}
+y <- data.train[, "INCWAGE", drop = TRUE]
+mod.ridge <-  cv.glmnet(train.mat, y, alpha = 0, lambda = grid, thresh = 1e-12) 
+
+lambda.best <-  mod.ridge$lambda.min
+
+predict(mod.ridge, s = lambda.best, type = "coefficients")
+```
+
+Lasso (Frequentist)
+```{r}
+mod.lasso <- cv.glmnet(train.mat, y, alpha = 1, lambda = grid, thresh = 1e-12) 
+
+lambda.best <-  mod.lasso$lambda.min
+
+predict(mod.lasso, s = lambda.best, type = "coefficients")
+```
+
+
+# Bayesian Linear Regression Model (MCMC)
+
+```{r}
+library(rstanarm)
+```
+
+a) Simple Linear Regression, INCWAGE ~ YEDUC
+```{r}
+bayes1 = stan_glm(INCWAGE ~ YEDUC, data = data)
+```
+
+```{r}
+bayes1
+ci95_1 <- posterior_interval(bayes1, prob = 0.95)
+round(ci95_1,2)
+```
+
+b) Multivariate Linear Regression, INCWAGE ~ YEDUC + controls
+```{r}
+bayes2 = stan_glm(INCWAGE ~ YEDUC + AGE + UHRSWORK + cRACE + cMARST + STATE, data = data)
+```
+
+```{r}
+bayes2
+ci95_2 <- posterior_interval(bayes2, prob = 0.95)
+round(ci95_2,2)
+```
+
+c) Separate Regression by SEX
+```{r}
+bayes_m = stan_glm(INCWAGE ~ YEDUC + UHRSWORK + AGE + cRACE + cMARST + STATE, data = data[data$cSEX == "Male",])
+
+bayes_f = stan_glm(INCWAGE ~ YEDUC + UHRSWORK + AGE + cRACE + cMARST + STATE, data = data[data$cSEX == "Female",])
+```
+
+```{r}
+bayes_m
+ci95_m <- posterior_interval(bayes_m, prob = 0.95)
+round(ci95,2)
+```
+
+```{r}
+bayes_f
+ci95_f <- posterior_interval(bayes_f, prob = 0.95)
+round(ci95,2)
+```
+
+# Multi-level Model
+
+```{r}
+install.packages("lme4")
+library(lme4)
+```
+
+For the purpose of our study, a multi-model MCMC takes too long with over a million of data (over a day with random intercept alone); hence I decided to randomly select 10000 data for truncated hierarchical model
+```{r}
+set.seed(11)
+sample_indices <- sample(nrow(data), 10000)
+multidata <- data[sample_indices,]
+
+```
+
+Random Intercepts Model
+```{r}
+multi_model1 = stan_lmer(INCWAGE ~ YEDUC + SEX + (1 | STATE), data = multidata)
+```
+
+```{r}
+summary(multi_model1)
+```
+
+
+Random Intercepts + Slopes Model
+```{r}
+multi_model2 = stan_lmer(INCWAGE ~ SEX + (1 + YEDUC | STATE), data = multidata)
+```
+
+
+```{r}
+summary(multi_model2)
+```
+
+
+Random Slopes Model
+```{r}
+multi_model3 = stan_lmer(INCWAGE ~ SEX + (YEDUC | STATE), data = multidata)
+```
+
+
+```{r}
+summary(multi_model3)
+```
